@@ -117,7 +117,10 @@ The data recorded from the microphone is only used to feed the COFDMTV decoder a
 Rattlegram uses a very small temporary buffer in volatile memory and constantly overwrites that buffer with new data from the microphone.
 The resulting text message from the COFDMTV decoder is the only data that gets stored in persistent storage on your device.</string>
 	<string name="about">About Rattlegram</string>
-	<string name="about_text">Rattlegram %1$s\nCopyright 2022 aicodix GmbH
+	<string name="about_text">Rattlegram %1$s\nCopyright 2022 aicodix GmbH\nEncryption additions 2025
+\n\n🔒 NEW: PASSWORD ENCRYPTION SUPPORT
+\n\nThis version adds optional password-based encryption using a simple XOR stream cipher (CRC32 + Xorshift32 PRNG). This provides basic privacy for casual communications but is NOT suitable for high-security applications. Both sender and receiver must use the same password. Leave password empty to disable encryption.
+\n\n⚠️ FOR DEMONSTRATION/PRIVACY PURPOSES ONLY - For production security, use established cryptographic libraries (PBKDF2/Argon2 + ChaCha20/AES).
 \n\nPlease read DISCLAIMER at the bottom of this page.
 \n\nRattlegram transmits short text messages as COFDMTV encoded audio and is based on open-source software:
 \n\nOFDM modem implementation and specification:\nhttps://github.com/aicodix/modem\nBSD Zero Clause License
