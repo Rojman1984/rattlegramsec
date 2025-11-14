@@ -248,6 +248,9 @@
 		android:id="@+id/action_edit_call_sign"
 		android:title="@string/call_sign" />
 	<item
+		android:id="@+id/action_set_password"
+		android:title="@string/set_password" />
+	<item
 		android:id="@+id/action_privacy_policy"
 		android:title="@string/privacy_policy" />
 	<item
