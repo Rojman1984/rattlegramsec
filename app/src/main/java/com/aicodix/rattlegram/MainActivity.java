@@ -116,10 +116,11 @@ public class MainActivity extends AppCompatActivity {
 	private byte[] stagedCall;
 	private String callSign;
 	private String draftText;
+	private String password;
 
 	private native boolean createEncoder(int sampleRate);
 
-	private native void configureEncoder(byte[] payload, byte[] callSign, int carrierFrequency, int noiseSymbols, boolean fancyHeader);
+	private native void configureEncoder(byte[] payload, byte[] callSign, int carrierFrequency, int noiseSymbols, boolean fancyHeader, String password);
 
 	private native boolean produceEncoder(short[] audioBuffer, int channelSelect);
 
@@ -177,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private native void stagedDecoder(float[] carrierFrequencyOffset, int[] operationMode, byte[] callSign);
 
-	private native int fetchDecoder(byte[] payload);
+	private native int fetchDecoder(byte[] payload, String password);
 
 	private native boolean createDecoder(int sampleRate);
 
@@ -234,7 +235,7 @@ public class MainActivity extends AppCompatActivity {
 					fromStatus();
 					break;
 				case STATUS_DONE:
-					int result = fetchDecoder(payload);
+					int result = fetchDecoder(payload, password);
 					if (result < 0) {
 						addLine(new String(stagedCall).trim(), getString(R.string.decoding_failed));
 					} else {
@@ -403,6 +404,7 @@ public class MainActivity extends AppCompatActivity {
 		state.putInt("repeaterDebounce", repeaterDebounce);
 		state.putString("callSign", callSign);
 		state.putString("draftText", draftText);
+		state.putString("password", password);
 		state.putBoolean("fancyHeader", fancyHeader);
 		state.putBoolean("repeaterMode", repeaterMode);
 		for (int i = 0; i < messages.getCount(); ++i)
@@ -425,6 +427,7 @@ public class MainActivity extends AppCompatActivity {
 		edit.putInt("repeaterDebounce", repeaterDebounce);
 		edit.putString("callSign", callSign);
 		edit.putString("draftText", draftText);
+		edit.putString("password", password);
 		edit.putBoolean("fancyHeader", fancyHeader);
 		edit.putBoolean("repeaterMode", repeaterMode);
 		for (int i = 0; i < messages.getCount(); ++i)
@@ -444,6 +447,7 @@ public class MainActivity extends AppCompatActivity {
 		final int defaultRepeaterDebounce = 60;
 		final String defaultCallSign = "ANONYMOUS";
 		final String defaultDraftText = "";
+		final String defaultPassword = "";
 		final boolean defaultFancyHeader = false;
 		final boolean defaultRepeaterMode = false;
 		if (state == null) {
@@ -460,6 +464,7 @@ public class MainActivity extends AppCompatActivity {
 			repeaterDebounce = pref.getInt("repeaterDebounce", defaultRepeaterDebounce);
 			callSign = pref.getString("callSign", defaultCallSign);
 			draftText = pref.getString("draftText", defaultDraftText);
+			password = pref.getString("password", defaultPassword);
 			fancyHeader = pref.getBoolean("fancyHeader", defaultFancyHeader);
 			repeaterMode = pref.getBoolean("repeaterMode", defaultRepeaterMode);
 			for (int i = 0; i < 100; ++i) {
@@ -480,6 +485,7 @@ public class MainActivity extends AppCompatActivity {
 			repeaterDebounce = state.getInt("repeaterDebounce", defaultRepeaterDebounce);
 			callSign = state.getString("callSign", defaultCallSign);
 			draftText = state.getString("draftText", defaultDraftText);
+			password = state.getString("password", defaultPassword);
 			fancyHeader = state.getBoolean("fancyHeader", defaultFancyHeader);
 			repeaterMode = state.getBoolean("repeaterMode", defaultRepeaterMode);
 			for (int i = 0; i < 100; ++i) {
@@ -941,6 +947,10 @@ public class MainActivity extends AppCompatActivity {
 			editCallSign();
 			return true;
 		}
+		if (id == R.id.action_edit_password) {
+			editPassword();
+			return true;
+		}
 		if (id == R.id.action_set_carrier_frequency) {
 			setCarrierFrequency();
 			return true;
@@ -1176,7 +1186,7 @@ public class MainActivity extends AppCompatActivity {
 			addLine(callSign.trim(), getString(R.string.sent_ping));
 		else
 			addMessage(callSign.trim(), getString(R.string.transmitted), new String(mesg).trim());
-		configureEncoder(mesg, callTerm(), carrierFrequency, noiseSymbols, fancyHeader);
+		configureEncoder(mesg, callTerm(), carrierFrequency, noiseSymbols, fancyHeader, password);
 		for (int i = 0; i < 5; ++i) {
 			produceEncoder(outputBuffer, outputChannel);
 			audioTrack.write(outputBuffer, 0, outputBuffer.length);
@@ -1203,7 +1213,7 @@ public class MainActivity extends AppCompatActivity {
 			repeatedMessages.add(message);
 		stopListening();
 		addMessage(new String(stagedCall).trim(), getString(R.string.repeated), new String(payload).trim());
-		configureEncoder(payload, stagedCall, carrierFrequency, noiseSymbols, fancyHeader);
+		configureEncoder(payload, stagedCall, carrierFrequency, noiseSymbols, fancyHeader, password);
 		for (int i = 0; i < 5; ++i) {
 			produceEncoder(outputBuffer, outputChannel);
 			audioTrack.write(outputBuffer, 0, outputBuffer.length);
@@ -1267,6 +1277,21 @@ public class MainActivity extends AppCompatActivity {
 		builder.setView(view);
 		builder.setNegativeButton(R.string.cancel, null);
 		builder.setPositiveButton(R.string.okay, (dialogInterface, i) -> callSign = edit.getText().toString());
+		builder.show();
+	}
+
+	private void editPassword() {
+		View view = getLayoutInflater().inflate(R.layout.encryption_password, null);
+		EditText edit = view.findViewById(R.id.password);
+		edit.setText(password);
+		AlertDialog.Builder builder = new AlertDialog.Builder(this, R.style.Theme_AlertDialog);
+		builder.setTitle(R.string.encryption_password);
+		builder.setView(view);
+		builder.setNegativeButton(R.string.cancel, null);
+		builder.setPositiveButton(R.string.okay, (dialogInterface, i) -> {
+			password = edit.getText().toString();
+			storeSettings();
+		});
 		builder.show();
 	}
 

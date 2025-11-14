@@ -9,6 +9,59 @@ Copyright 2022 Ahmet Inan <inan@aicodix.de>
 #include "encoder.hh"
 #include "decoder.hh"
 
+/*
+ * -----------------------------------------------------------------
+ * SIMPLE XOR CIPHER - DEMONSTRATION ONLY
+ * -----------------------------------------------------------------
+ * This is a simple stream cipher for privacy, NOT for real security.
+ * It uses CRC32 as a "hash" (insecure KDF) to seed Xorshift32 (insecure PRNG).
+ * A real implementation should use PBKDF2/Argon2 and ChaCha20/AES-CTR.
+ */
+#include "xorshift.hh"
+#include "crc.hh"
+#include <stdint.h>
+#include <cstring>
+
+void simple_xor_cipher(uint8_t *data, int data_len, const char *password) {
+    if (!password || password[0] == '\0') {
+        // No password, so no encryption/decryption
+        return;
+    }
+
+    // 1. "Hash" the password to create a 32-bit seed.
+    // We use the CRC32 polynomial from polar.hh (0x8F6E37A0)
+    CODE::CRC<uint32_t> crc_hash(0x8F6E37A0);
+    for (const char* p = password; *p; ++p) {
+        crc_hash(static_cast<uint8_t>(*p));
+    }
+    uint32_t seed = crc_hash();
+
+    // 2. Ensure seed is never zero (would break Xorshift32)
+    if (seed == 0) {
+        seed = 0xDEADBEEF;  // Arbitrary non-zero constant
+    }
+
+    // 3. Seed the Xorshift32 PRNG with our password-derived seed.
+    CODE::Xorshift32 keystream_prng(seed);
+
+    // 4. Encrypt/Decrypt data in-place by XORing with the keystream.
+    uint32_t key_chunk = 0;
+    for (int i = 0; i < data_len; ++i) {
+        // Generate a new 4-byte key chunk when needed
+        if (i % 4 == 0) {
+            key_chunk = keystream_prng();
+        }
+
+        // XOR the data byte with one byte from the key chunk
+        data[i] ^= (key_chunk >> ((i % 4) * 8)) & 0xFF;
+    }
+}
+/*
+ * -----------------------------------------------------------------
+ * END OF SIMPLE XOR CIPHER
+ * -----------------------------------------------------------------
+ */
+
 static EncoderInterface *encoder;
 static DecoderInterface *decoder;
 
@@ -76,10 +129,19 @@ Java_com_aicodix_rattlegram_MainActivity_configureEncoder(
 	jbyteArray JNI_callSign,
 	jint carrierFrequency,
 	jint noiseSymbols,
-	jboolean fancyHeader) {
+	jboolean fancyHeader,
+	jstring JNI_password) {
 
 	if (!encoder)
 		return;
+
+	// Get password string
+	const char *password = nullptr;
+	if (JNI_password != nullptr) {
+		password = env->GetStringUTFChars(JNI_password, nullptr);
+		if (!password)
+			return;  // Failed to get password
+	}
 
 	jbyte *payload, *callSign;
 	payload = env->GetByteArrayElements(JNI_payload, nullptr);
@@ -89,17 +151,36 @@ Java_com_aicodix_rattlegram_MainActivity_configureEncoder(
 	if (!callSign)
 		goto callSignFail;
 
-	encoder->configure(
-		reinterpret_cast<uint8_t *>(payload),
-		reinterpret_cast<int8_t *>(callSign),
-		carrierFrequency,
-		noiseSymbols,
-		fancyHeader);
+	// Create a copy of the payload for encryption (don't modify original)
+	jsize payload_len = env->GetArrayLength(JNI_payload);
+	{
+		uint8_t *encrypted_payload = new(std::nothrow) uint8_t[payload_len];
+		if (encrypted_payload) {
+			// Copy original payload
+			memcpy(encrypted_payload, payload, payload_len);
+
+			// Encrypt the copy
+			simple_xor_cipher(encrypted_payload, payload_len, password);
+
+			// Configure encoder with encrypted data
+			encoder->configure(
+				encrypted_payload,
+				reinterpret_cast<int8_t *>(callSign),
+				carrierFrequency,
+				noiseSymbols,
+				fancyHeader);
+
+			// Clean up
+			delete[] encrypted_payload;
+		}
+	}
 
 	env->ReleaseByteArrayElements(JNI_callSign, callSign, JNI_ABORT);
 	callSignFail:
 	env->ReleaseByteArrayElements(JNI_payload, payload, JNI_ABORT);
-	payloadFail:;
+	payloadFail:
+	if (JNI_password != nullptr && password != nullptr)
+		env->ReleaseStringUTFChars(JNI_password, password);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -144,14 +225,39 @@ extern "C" JNIEXPORT jint JNICALL
 Java_com_aicodix_rattlegram_MainActivity_fetchDecoder(
 	JNIEnv *env,
 	jobject,
-	jbyteArray JNI_payload) {
+	jbyteArray JNI_payload,
+	jstring JNI_password) {
+
 	jint status = -1;
-	if (decoder) {
-		jbyte *payload = env->GetByteArrayElements(JNI_payload, nullptr);
-		if (payload)
-			status = decoder->fetch(reinterpret_cast<uint8_t *>(payload));
+	if (!decoder)
+		return status;
+
+	// Get password string
+	const char *password = nullptr;
+	if (JNI_password != nullptr) {
+		password = env->GetStringUTFChars(JNI_password, nullptr);
+		if (!password)
+			return -1;  // Failed to get password
+	}
+
+	jbyte *payload = env->GetByteArrayElements(JNI_payload, nullptr);
+	if (payload) {
+		// Call original fetch
+		status = decoder->fetch(reinterpret_cast<uint8_t *>(payload));
+
+		// Only decrypt if fetch was successful
+		if (status >= 0) {
+			jsize payload_len = env->GetArrayLength(JNI_payload);
+			simple_xor_cipher(reinterpret_cast<uint8_t *>(payload), payload_len, password);
+		}
+
+		// Copy back the payload (decrypted if successful, unchanged if failed)
 		env->ReleaseByteArrayElements(JNI_payload, payload, 0);
 	}
+
+	if (JNI_password != nullptr && password != nullptr)
+		env->ReleaseStringUTFChars(JNI_password, password);
+
 	return status;
 }
 
@@ -260,4 +366,3 @@ Java_com_aicodix_rattlegram_MainActivity_spectrumDecoder(
 	env->ReleaseIntArrayElements(JNI_spectrumPixels, spectrumPixels, 0);
 	spectrumFail:;
 }
-

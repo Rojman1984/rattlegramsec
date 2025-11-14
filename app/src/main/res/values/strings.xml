@@ -57,6 +57,9 @@
 	<string name="compose_message">Compose Message</string>
 	<string name="call_sign">Call Sign</string>
 	<string name="call_hint">Your call sign here</string>
+	<string name="encryption_password">Encryption Password</string>
+	<string name="password_hint">Leave empty for no encryption</string>
+	<string name="password_info">Password protects messages with simple XOR encryption. Both sender and receiver must use the same password.</string>
 	<string name="message_hint">Your message here</string>
 	<string name="carrier_frequency">Carrier Frequency</string>
 	<string name="audio_init_failed">Audio initialization failed. Try other settings. Force Quit and restart might also help.</string>
