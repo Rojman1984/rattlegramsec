@@ -143,7 +143,10 @@ Java_com_aicodix_rattlegram_MainActivity_configureEncoder(
 			return;  // Failed to get password
 	}
 
+	// Declare all variables before any goto statements
 	jbyte *payload, *callSign;
+	jsize payload_len;
+
 	payload = env->GetByteArrayElements(JNI_payload, nullptr);
 	if (!payload)
 		goto payloadFail;
@@ -152,7 +155,7 @@ Java_com_aicodix_rattlegram_MainActivity_configureEncoder(
 		goto callSignFail;
 
 	// Create a copy of the payload for encryption (don't modify original)
-	jsize payload_len = env->GetArrayLength(JNI_payload);
+	payload_len = env->GetArrayLength(JNI_payload);
 	{
 		uint8_t *encrypted_payload = new(std::nothrow) uint8_t[payload_len];
 		if (encrypted_payload) {
@@ -240,14 +243,18 @@ Java_com_aicodix_rattlegram_MainActivity_fetchDecoder(
 			return -1;  // Failed to get password
 	}
 
-	jbyte *payload = env->GetByteArrayElements(JNI_payload, nullptr);
+	// Declare variables before use
+	jbyte *payload;
+	jsize payload_len;
+
+	payload = env->GetByteArrayElements(JNI_payload, nullptr);
 	if (payload) {
 		// Call original fetch
 		status = decoder->fetch(reinterpret_cast<uint8_t *>(payload));
 
 		// Only decrypt if fetch was successful
 		if (status >= 0) {
-			jsize payload_len = env->GetArrayLength(JNI_payload);
+			payload_len = env->GetArrayLength(JNI_payload);
 			simple_xor_cipher(reinterpret_cast<uint8_t *>(payload), payload_len, password);
 		}
 
